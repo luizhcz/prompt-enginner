@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prompt Engineer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --gutter-w: 44px;
+      --bg: #f6f8fa;
+      --surface: #ffffff;
+      --border: #d0d7de;
+      --text: #1f2328;
+      --muted: #6e7781;
+      --nav-h: 52px;
+      --del-bg: rgba(255, 70, 70, 0.13);
+      --del-border: rgba(220, 50, 50, 0.5);
+      --ins-bg: rgba(36, 180, 72, 0.13);
+      --ins-border: rgba(26, 150, 60, 0.5);
+      --mono: 'JetBrains Mono','Fira Code','Cascadia Code',Consolas,monospace;
+      --sans: -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      --line-h: 1.55;
+      --font-sz: 13px;
+    }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── NAV ─────────────────────────────── */
+    nav {
+      height: var(--nav-h);
+      background: #1c2128;
+      border-bottom: 1px solid #444c56;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 12px;
+      flex-shrink: 0;
+      z-index: 100;
+    }
+    .nav-logo { font-size: 14px; font-weight: 700; color: #e6edf3; letter-spacing: -0.3px; }
+    .nav-logo em { color: #58a6ff; font-style: normal; }
+    .nav-sep { width: 1px; height: 20px; background: #444c56; margin: 0 4px; }
+    .tab-btn {
+      padding: 5px 13px; border-radius: 6px; border: 1px solid transparent;
+      cursor: pointer; font-size: 12.5px; background: transparent; color: #8b949e;
+      transition: all .15s; font-family: var(--sans);
+    }
+    .tab-btn:hover { color: #e6edf3; background: rgba(255,255,255,.06); }
+    .tab-btn.active { color: #e6edf3; background: rgba(255,255,255,.1); border-color: #444c56; }
+    .nav-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    .btn {
+      padding: 5px 14px; border-radius: 6px; border: 1px solid;
+      cursor: pointer; font-size: 12.5px; font-weight: 500; font-family: var(--sans); transition: all .15s;
+    }
+    .btn-ghost { background: rgba(255,255,255,.07); border-color: #555f6d; color: #cdd9e5; }
+    .btn-ghost:hover { background: rgba(255,255,255,.14); }
+    .btn-primary { background: #1f6feb; border-color: #388bfd; color: #fff; }
+    .btn-primary:hover { background: #388bfd; }
+    .btn-success { background: #1a6e2e; border-color: #2ea043; color: #fff; }
+    .btn-success:hover { background: #2ea043; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11px; padding: 2px 7px; border-radius: 10px; font-weight: 600;
+    }
+    .pill-ins { background: rgba(36,180,72,.18); color: #2ea043; }
+    .pill-del { background: rgba(220,50,50,.18); color: #cf222e; }
+    .pill-neu { background: rgba(0,0,0,.07); color: var(--muted); }
+
+    /* ── SCREENS ─────────────────────────── */
+    .screen { flex: 1; overflow: hidden; display: none; flex-direction: column; }
+    .screen.active { display: flex; }
+
+    /* ── DROP ZONE ───────────────────────── */
+    #dropZone {
+      align-items: center; justify-content: center; gap: 0;
+      background: var(--bg);
+    }
+    .drop-box {
+      border: 2px dashed var(--border); border-radius: 14px;
+      padding: 56px 80px; text-align: center; cursor: pointer; transition: all .2s;
+    }
+    .drop-box:hover, #dropZone.over .drop-box { border-color: #1f6feb; background: rgba(31,111,235,.04); }
+    .drop-icon { font-size: 52px; margin-bottom: 16px; }
+    .drop-title { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+    .drop-sub { color: var(--muted); font-size: 14px; margin-bottom: 20px; }
+
+    /* ── EDITOR SCREEN ───────────────────── */
+    .editor-bar {
+      display: flex; background: var(--surface);
+      border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .editor-bar-col {
+      flex: 1; padding: 7px 20px; font-size: 11px; font-weight: 700;
+      color: var(--muted); text-transform: uppercase; letter-spacing: .6px;
+      border-right: 1px solid var(--border); display: flex; align-items: center; gap: 8px;
+    }
+    .editor-bar-col:last-child { border-right: none; }
+
+    .editor-body { flex: 1; overflow: hidden; display: flex; }
+    .col-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; }
+    .col-divider { width: 1px; background: var(--border); flex-shrink: 0; }
+
+    .field-section { border-bottom: 1px solid var(--border); }
+    .field-header {
+      padding: 6px 16px; font-size: 11px; font-weight: 700; color: var(--muted);
+      background: var(--bg); border-bottom: 1px solid var(--border);
+      font-family: var(--mono); letter-spacing: .3px; position: sticky; top: 0; z-index: 2;
+    }
+    .field-content { font-family: var(--mono); font-size: var(--font-sz); line-height: var(--line-h); }
+
+    /* left panel lines with line numbers */
+    .ro-line {
+      display: flex; align-items: flex-start; padding: 1px 0;
+      min-height: calc(var(--font-sz) * var(--line-h));
+    }
+    .ro-line.del {
+      background: var(--del-bg);
+      border-left: 3px solid var(--del-border);
+    }
+    .ro-ln {
+      flex-shrink: 0; width: var(--gutter-w); padding: 1px 8px 0 0;
+      text-align: right; color: var(--muted); font-size: 11px;
+      user-select: none; opacity: 0.5; line-height: var(--line-h);
+    }
+    .ro-txt {
+      flex: 1; padding: 0 16px; white-space: pre-wrap;
+      word-break: break-word; line-height: var(--line-h);
+    }
+
+    /* textarea + backdrop + gutter */
+    .te-wrap { display: flex; }
+    .te-gutter {
+      flex-shrink: 0; width: var(--gutter-w);
+      background: var(--bg); border-right: 1px solid var(--border);
+      font-family: var(--mono); font-size: var(--font-sz);
+      overflow: hidden; user-select: none;
+    }
+    .te-gutter .ln-num {
+      display: flex; align-items: flex-start; justify-content: flex-end;
+      padding: 1px 8px 0 0; color: var(--muted); font-size: 11px; opacity: 0.5;
+      white-space: nowrap; overflow: hidden; line-height: var(--line-h);
+      min-height: calc(var(--font-sz) * var(--line-h));
+    }
+    .te-inner { flex: 1; position: relative; min-width: 0; }
+    .te-back {
+      position: absolute; top: 0; left: 0; right: 0;
+      padding: 0 16px;
+      font-family: var(--mono); font-size: var(--font-sz); line-height: var(--line-h);
+      color: transparent; pointer-events: none; overflow: hidden;
+    }
+    .te-back .bl {
+      white-space: pre-wrap; word-break: break-word;
+      min-height: calc(var(--font-sz) * var(--line-h));
+    }
+    .te-back .bl.ins { background: var(--ins-bg); border-left: 3px solid var(--ins-border); margin-left: -3px; }
+    textarea.te-input {
+      display: block; width: 100%; min-height: 80px;
+      padding: 0 16px;
+      font-family: var(--mono); font-size: var(--font-sz); line-height: var(--line-h);
+      background: transparent; border: none; outline: none; resize: none; overflow: hidden;
+      position: relative; z-index: 1; color: var(--text);
+      white-space: pre-wrap; word-break: break-word;
+    }
+
+    /* stats bar */
+    .stats-bar {
+      background: var(--surface); border-top: 1px solid var(--border);
+      padding: 5px 20px; font-size: 11.5px; color: var(--muted);
+      display: flex; gap: 16px; align-items: center; flex-shrink: 0;
+    }
+    .stats-bar span { display: flex; align-items: center; gap: 5px; }
+
+    /* ── DIFF SCREEN ─────────────────────── */
+    .diff-toolbar {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 10px 20px; display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+    }
+    .diff-toolbar h2 { font-size: 14px; font-weight: 700; }
+    .diff-toolbar .tl-right { margin-left: auto; display: flex; gap: 8px; }
+
+    .diff-body { flex: 1; overflow-y: auto; padding: 20px; }
+
+    .diff-file {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; margin-bottom: 20px; overflow: hidden;
+    }
+    .diff-file-head {
+      padding: 9px 16px; background: var(--bg); border-bottom: 1px solid var(--border);
+      font-size: 12.5px; font-weight: 700; font-family: var(--mono);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .badge {
+      font-size: 10.5px; padding: 1px 7px; border-radius: 10px;
+      font-family: var(--sans); font-weight: 600;
+    }
+    .badge-chg { background: #fff3cd; color: #856404; }
+    .badge-ok  { background: #d4edda; color: #155724; }
+
+    .diff-lines { font-family: var(--mono); font-size: 12.5px; line-height: 1.55; }
+    .dl {
+      display: flex; padding: 1px 0;
+      border-bottom: 1px solid transparent;
+    }
+    .dl.d-del { background: rgba(255,70,70,.1); }
+    .dl.d-ins { background: rgba(36,180,72,.1); }
+    .dl.d-hunk { background: rgba(0,0,0,.04); font-style: italic; color: var(--muted); }
+    .dl-nums { flex-shrink: 0; width: 88px; display: flex; }
+    .dl-num {
+      width: 44px; padding: 0 8px; text-align: right; color: var(--muted);
+      font-size: 11px; user-select: none; border-right: 1px solid var(--border);
+    }
+    .dl-sign { flex-shrink: 0; width: 22px; text-align: center; font-weight: 700; user-select: none; padding: 0 2px; }
+    .dl.d-del .dl-sign { color: #cf222e; }
+    .dl.d-ins .dl-sign { color: #1a7f37; }
+    .dl-txt { flex: 1; padding: 0 12px; white-space: pre-wrap; word-break: break-word; }
+    .w-del { background: rgba(220,50,50,.3); border-radius: 2px; }
+    .w-ins { background: rgba(26,150,60,.3); border-radius: 2px; }
+
+    .diff-empty {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      height: 100%; gap: 12px; color: var(--muted); font-size: 15px;
+    }
+    .diff-empty .di-icon { font-size: 44px; }
+
+    /* ── SEARCH BAR ─────────────────────── */
+    .search-bar {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 6px 14px; display: flex; align-items: center; gap: 8px;
+      flex-shrink: 0; z-index: 10;
+    }
+    .search-input {
+      font-family: var(--mono); font-size: 13px; padding: 4px 10px;
+      border: 1px solid var(--border); border-radius: 5px; outline: none;
+      width: 240px; background: var(--bg); color: var(--text); transition: border .15s;
+    }
+    .search-input:focus { border-color: #1f6feb; box-shadow: 0 0 0 3px rgba(31,111,235,.12); }
+    .search-input.no-match { border-color: #cf222e; background: rgba(255,70,70,.06); }
+    .search-count { font-size: 12px; color: var(--muted); min-width: 80px; white-space: nowrap; }
+    .srch-btn {
+      padding: 3px 9px; border-radius: 5px; border: 1px solid var(--border);
+      background: var(--surface); cursor: pointer; font-size: 13px; color: var(--text);
+      font-family: var(--sans); transition: background .12s;
+    }
+    .srch-btn:hover { background: var(--bg); }
+    .srch-case-lbl {
+      font-size: 12px; color: var(--muted); display: flex; align-items: center;
+      gap: 4px; cursor: pointer; user-select: none;
+    }
+
+    /* search marks */
+    mark.srch-l {
+      background: rgba(255, 210, 30, 0.55); border-radius: 2px;
+      color: inherit; padding: 0 1px;
+    }
+    mark.srch-l.cur {
+      background: rgba(255, 140, 0, 0.8); outline: 2px solid rgba(255,120,0,.5);
+      border-radius: 2px;
+    }
+    /* right-panel marks live inside color:transparent backdrop */
+    mark.srch-r { background: rgba(255, 210, 30, 0.55); border-radius: 2px; }
+    mark.srch-r.cur { background: rgba(255, 140, 0, 0.85); outline: 2px solid rgba(255,120,0,.6); }
+
+    /* ── SCROLL LOCK BUTTON ──────────────── */
+    .tool-btn {
+      padding: 3px 10px; border-radius: 5px; border: 1px solid #555f6d;
+      background: rgba(255,255,255,.07); color: #cdd9e5; cursor: pointer;
+      font-size: 12px; font-family: var(--sans); transition: all .15s; white-space: nowrap;
+    }
+    .tool-btn:hover { background: rgba(255,255,255,.14); }
+    .tool-btn.on { background: rgba(31,111,235,.25); border-color: #388bfd; color: #58a6ff; }
+
+    /* scrollbars */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<!-- ── NAV ───────────────────────────────── -->
+<nav>
+  <div class="nav-logo">Prompt <em>Engineer</em></div>
+  <div class="nav-sep"></div>
+  <button class="tab-btn active" id="tabEditor" onclick="showTab('editor')">✏️ Editor</button>
+  <button class="tab-btn" id="tabDiff" onclick="showTab('diff')">📋 Diferenças</button>
+  <div class="nav-right">
+    <span class="pill pill-ins" id="statIns">+0</span>
+    <span class="pill pill-del" id="statDel">-0</span>
+    <span class="pill pill-neu" id="statFlds">0 campos</span>
+    <div class="nav-sep"></div>
+    <button class="btn btn-ghost" onclick="document.getElementById('fileIn').click()">📂 Abrir JSON</button>
+  </div>
+</nav>
+
+<!-- ── DROP ZONE ─────────────────────────── -->
+<div class="screen active" id="dropZone">
+  <div class="drop-box" onclick="document.getElementById('fileIn').click()">
+    <div class="drop-icon">📄</div>
+    <div class="drop-title">Abrir arquivo JSON</div>
+    <div class="drop-sub">Arraste um arquivo aqui ou clique para selecionar</div>
+    <button class="btn btn-primary" style="pointer-events:none">Selecionar arquivo</button>
+  </div>
+</div>
+
+<!-- ── EDITOR SCREEN ─────────────────────── -->
+<div class="screen" id="screenEditor">
+  <div class="editor-bar">
+    <div class="editor-bar-col">🔴 Original</div>
+    <div class="editor-bar-col" style="justify-content:space-between">
+      <span>🟢 Editando</span>
+      <span style="display:flex;gap:6px">
+        <button id="lockBtn" class="tool-btn" onclick="toggleScrollLock()" title="Travar rolagem nos dois lados (sincronizar scroll)">🔓 Travar scroll</button>
+        <button class="tool-btn" onclick="openSearch()" title="Buscar texto (Ctrl+F)">🔍 Buscar</button>
+      </span>
+    </div>
+  </div>
+
+  <!-- Search bar (hidden by default) -->
+  <div id="searchBar" class="search-bar" hidden>
+    <span style="font-size:14px;flex-shrink:0">🔍</span>
+    <input type="text" id="searchInput" class="search-input"
+           placeholder="Buscar no prompt…" autocomplete="off" spellcheck="false">
+    <span id="searchCount" class="search-count">—</span>
+    <button class="srch-btn" onclick="prevMatch()" title="Anterior (Shift+Enter)">↑</button>
+    <button class="srch-btn" onclick="nextMatch()" title="Próximo (Enter)">↓</button>
+    <label class="srch-case-lbl" title="Diferenciar maiúsculas/minúsculas">
+      <input type="checkbox" id="searchCase" onchange="runSearch()"> Aa
+    </label>
+    <button class="srch-btn" onclick="closeSearch()" style="margin-left:auto" title="Fechar (Esc)">✕</button>
+  </div>
+
+  <div class="editor-body">
+    <div class="col-scroll" id="colLeft"></div>
+    <div class="col-divider"></div>
+    <div class="col-scroll" id="colRight"></div>
+  </div>
+  <div class="stats-bar">
+    <span>📄 <b id="sbFile">—</b></span>
+    <span style="margin-left:auto;gap:12px;display:flex">
+      <span>🟢 <span id="sbIns">0 linhas adicionadas</span></span>
+      <span>🔴 <span id="sbDel">0 linhas removidas</span></span>
+      <span>🗂 <span id="sbFlds">0 campos alterados</span></span>
+    </span>
+  </div>
+</div>
+
+<!-- ── DIFF SCREEN ───────────────────────── -->
+<div class="screen" id="screenDiff">
+  <div class="diff-toolbar">
+    <h2>Diferenças</h2>
+    <div class="tl-right">
+      <button class="btn btn-ghost" onclick="copyJSON()">📋 Copiar JSON</button>
+      <button class="btn btn-success" onclick="downloadJSON()">⬇ Baixar novo JSON</button>
+    </div>
+  </div>
+  <div class="diff-body" id="diffBody"></div>
+</div>
+
+<input type="file" id="fileIn" accept=".json" style="display:none">
+
+<script>
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+let rawJSON = null;
+let originalData = {};   // fieldPath → string
+let editedData   = {};   // fieldPath → string
+let fieldOrder   = [];
+let fileName     = 'output.json';
+let timers       = {};
+
+// ═══════════════════════════════════════════════════════
+// BOOTSTRAP
+// ═══════════════════════════════════════════════════════
+const fileIn = document.getElementById('fileIn');
+fileIn.addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (f) readFile(f);
+  fileIn.value = '';
+});
+
+// Drag & Drop
+const dz = document.getElementById('dropZone');
+document.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+document.addEventListener('dragleave', e => { if (!e.relatedTarget) dz.classList.remove('over'); });
+document.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if (f && f.name.endsWith('.json')) readFile(f);
+});
+
+function readFile(f) {
+  fileName = f.name.replace('.json', '_edited.json');
+  const r = new FileReader();
+  r.onload = ev => {
+    try {
+      const obj = JSON.parse(ev.target.result);
+      loadJSON(obj);
+    } catch(ex) {
+      alert('JSON inválido: ' + ex.message);
+    }
+  };
+  r.readAsText(f);
+}
+
+// ═══════════════════════════════════════════════════════
+// LOAD
+// ═══════════════════════════════════════════════════════
+function loadJSON(obj) {
+  rawJSON = JSON.parse(JSON.stringify(obj));
+  originalData = {};
+  editedData   = {};
+  fieldOrder   = [];
+  // reset search state
+  searchQuery      = '';
+  searchCurrent    = -1;
+  searchRightMarks = [];
+  searchLeftMarks  = [];
+  const inp = document.getElementById('searchInput');
+  if (inp) { inp.value = ''; inp.classList.remove('no-match'); }
+  document.getElementById('searchBar').hidden = true;
+  extractFields(obj, '');
+  renderEditor();
+  showTab('editor');
+  document.getElementById('sbFile').textContent = fileName.replace('_edited','');
+  updateStats();
+}
+
+function extractFields(obj, prefix) {
+  for (const [k, v] of Object.entries(obj)) {
+    const path = prefix ? `${prefix}.${k}` : k;
+    if (typeof v === 'string') {
+      originalData[path] = v;
+      editedData[path]   = v;
+      fieldOrder.push(path);
+    } else if (v && typeof v === 'object' && !Array.isArray(v)) {
+      extractFields(v, path);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// TABS / SCREENS
+// ═══════════════════════════════════════════════════════
+function showTab(tab) {
+  if (!rawJSON) return;
+  document.getElementById('dropZone').classList.remove('active');
+  document.getElementById('screenEditor').classList.remove('active');
+  document.getElementById('screenDiff').classList.remove('active');
+  document.getElementById('tabEditor').classList.remove('active');
+  document.getElementById('tabDiff').classList.remove('active');
+
+  if (tab === 'editor') {
+    document.getElementById('screenEditor').classList.add('active');
+    document.getElementById('tabEditor').classList.add('active');
+  } else {
+    renderDiff();
+    document.getElementById('screenDiff').classList.add('active');
+    document.getElementById('tabDiff').classList.add('active');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// DIFF ALGORITHM  (Myers LCS)
+// ═══════════════════════════════════════════════════════
+function diffLines(a, b) {
+  const al = a.split('\n'), bl = b.split('\n');
+  return lcs(al, bl);
+}
+
+function lcs(a, b) {
+  const m = a.length, n = b.length;
+  if (m === 0 && n === 0) return [];
+
+  // Limit for performance — fallback to line-by-line for huge texts
+  if (m * n > 4_000_000) return fallbackDiff(a, b);
+
+  const dp = [];
+  for (let i = 0; i <= m; i++) { dp[i] = new Int32Array(n + 1); }
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1]+1 : Math.max(dp[i-1][j], dp[i][j-1]);
+
+  const ops = [];
+  let i = m, j = n;
+  while (i > 0 || j > 0) {
+    if (i > 0 && j > 0 && a[i-1] === b[j-1]) {
+      ops.unshift({t:'=', v: a[i-1]}); i--; j--;
+    } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+      ops.unshift({t:'+', v: b[j-1]}); j--;
+    } else {
+      ops.unshift({t:'-', v: a[i-1]}); i--;
+    }
+  }
+  return ops;
+}
+
+function fallbackDiff(a, b) {
+  const ops = [];
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    if (i < a.length && i < b.length) {
+      if (a[i] === b[i]) ops.push({t:'=', v:a[i]});
+      else { ops.push({t:'-', v:a[i]}); ops.push({t:'+', v:b[i]}); }
+    } else if (i < a.length) ops.push({t:'-', v:a[i]});
+    else ops.push({t:'+', v:b[i]});
+  }
+  return ops;
+}
+
+function changedSets(ops) {
+  const orig = new Set(), next = new Set();
+  let oi = 0, ni = 0;
+  for (const op of ops) {
+    if (op.t === '-') orig.add(oi++);
+    else if (op.t === '+') next.add(ni++);
+    else { oi++; ni++; }
+  }
+  return {orig, next};
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER — EDITOR
+// ═══════════════════════════════════════════════════════
+function renderEditor() {
+  const colL = document.getElementById('colLeft');
+  const colR = document.getElementById('colRight');
+  colL.innerHTML = '';
+  colR.innerHTML = '';
+
+  for (const field of fieldOrder) {
+    const {lSec, rSec} = buildFieldRow(field);
+    colL.appendChild(lSec);
+    colR.appendChild(rSec);
+  }
+}
+
+function buildFieldRow(field) {
+  // LEFT (read-only)
+  const lSec = document.createElement('div');
+  lSec.className = 'field-section';
+  lSec.innerHTML = `<div class="field-header">${esc(field)}</div>`;
+  const lContent = document.createElement('div');
+  lContent.className = 'field-content';
+  lContent.id = `lc-${safeid(field)}`;
+  renderLeftLines(lContent, field);
+  lSec.appendChild(lContent);
+
+  // RIGHT (editable)
+  const rSec = document.createElement('div');
+  rSec.className = 'field-section';
+  rSec.innerHTML = `<div class="field-header">${esc(field)}</div>`;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'te-wrap';
+  wrap.id = `rw-${safeid(field)}`;
+
+  // gutter (line numbers)
+  const gutter = document.createElement('div');
+  gutter.className = 'te-gutter';
+  gutter.id = `tg-${safeid(field)}`;
+
+  // inner container holds backdrop + textarea
+  const inner = document.createElement('div');
+  inner.className = 'te-inner';
+
+  const back = document.createElement('div');
+  back.className = 'te-back';
+  back.setAttribute('aria-hidden', 'true');
+
+  const ta = document.createElement('textarea');
+  ta.className = 'te-input';
+  ta.value = editedData[field];
+  ta.spellcheck = false;
+  ta.setAttribute('data-field', field);
+
+  // ── build backdrop & gutter on first render
+  renderBackdrop(back, field);
+  renderGutter(gutter, editedData[field].split('\n').length);
+  inner.appendChild(back);
+  inner.appendChild(ta);
+  wrap.appendChild(gutter);
+  wrap.appendChild(inner);
+  rSec.appendChild(wrap);
+
+  // auto-size + sync gutter heights after paint
+  requestAnimationFrame(() => { autosize(ta, back); syncGutterHeights(gutter, back); });
+
+  // events
+  ta.addEventListener('input', () => {
+    autosize(ta, back);
+    clearTimeout(timers[field]);
+    timers[field] = setTimeout(() => onEdit(ta, back, field), 280);
+  });
+
+  ta.addEventListener('paste', e => {
+    e.preventDefault();
+    const txt = e.clipboardData.getData('text/plain');
+    const s = ta.selectionStart, en = ta.selectionEnd;
+    ta.value = ta.value.slice(0, s) + txt + ta.value.slice(en);
+    ta.selectionStart = ta.selectionEnd = s + txt.length;
+    ta.dispatchEvent(new Event('input'));
+  });
+
+  ta.addEventListener('keydown', e => {
+    // Tab → 2 spaces
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const s = ta.selectionStart;
+      ta.value = ta.value.slice(0, s) + '  ' + ta.value.slice(ta.selectionEnd);
+      ta.selectionStart = ta.selectionEnd = s + 2;
+      ta.dispatchEvent(new Event('input'));
+    }
+  });
+
+  return {lSec, rSec};
+}
+
+function onEdit(ta, back, field) {
+  editedData[field] = ta.value;
+  renderBackdrop(back, field);
+  const gutter = document.getElementById(`tg-${safeid(field)}`);
+  renderGutter(gutter, ta.value.split('\n').length);
+  requestAnimationFrame(() => syncGutterHeights(gutter, back));
+  renderLeftLines(document.getElementById(`lc-${safeid(field)}`), field);
+  updateStats();
+}
+
+function renderLeftLines(el, field) {
+  const orig = originalData[field];
+  const ops  = diffLines(orig, editedData[field]);
+  const {orig: changed} = changedSets(ops);
+  el.innerHTML = orig.split('\n').map((ln, i) => {
+    const content = searchQuery ? hlLine(ln, 'srch-l') : (esc(ln) || '\u00a0');
+    return `<div class="ro-line${changed.has(i) ? ' del' : ''}"><span class="ro-ln">${i + 1}</span><span class="ro-txt">${content}</span></div>`;
+  }).join('');
+}
+
+function renderBackdrop(back, field) {
+  const txt  = editedData[field];
+  const orig = originalData[field];
+  const ops  = diffLines(orig, txt);
+  const {next: changed} = changedSets(ops);
+  back.innerHTML = txt.split('\n').map((ln, i) => {
+    const content = searchQuery ? hlLine(ln, 'srch-r') : (esc(ln) || '\u00a0');
+    return `<div class="bl${changed.has(i) ? ' ins' : ''}">${content}</div>`;
+  }).join('');
+}
+
+function autosize(ta, back) {
+  ta.style.height = 'auto';
+  ta.style.height = ta.scrollHeight + 'px';
+  if (back) back.style.height = ta.scrollHeight + 'px';
+  const field = ta.getAttribute('data-field');
+  if (field) {
+    const g = document.getElementById(`tg-${safeid(field)}`);
+    if (g && back) requestAnimationFrame(() => syncGutterHeights(g, back));
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// STATS
+// ═══════════════════════════════════════════════════════
+function updateStats() {
+  let ins = 0, del = 0, chg = 0;
+  for (const f of fieldOrder) {
+    if (originalData[f] !== editedData[f]) {
+      chg++;
+      const ops = diffLines(originalData[f], editedData[f]);
+      for (const o of ops) {
+        if (o.t === '+') ins++;
+        else if (o.t === '-') del++;
+      }
+    }
+  }
+  document.getElementById('statIns').textContent = `+${ins}`;
+  document.getElementById('statDel').textContent = `-${del}`;
+  document.getElementById('statFlds').textContent = `${chg} campo${chg !== 1 ? 's' : ''}`;
+  document.getElementById('sbIns').textContent = `${ins} linha${ins !== 1 ? 's' : ''} adicionada${ins !== 1 ? 's' : ''}`;
+  document.getElementById('sbDel').textContent = `${del} linha${del !== 1 ? 's' : ''} removida${del !== 1 ? 's' : ''}`;
+  document.getElementById('sbFlds').textContent = `${chg} campo${chg !== 1 ? 's' : ''} alterado${chg !== 1 ? 's' : ''}`;
+}
+
+// ═══════════════════════════════════════════════════════
+// RENDER — DIFF SCREEN
+// ═══════════════════════════════════════════════════════
+function renderDiff() {
+  const body = document.getElementById('diffBody');
+  body.innerHTML = '';
+  let anyChange = false;
+
+  for (const field of fieldOrder) {
+    const orig = originalData[field];
+    const edit = editedData[field];
+    if (orig === edit) continue;
+    anyChange = true;
+
+    const ops  = diffLines(orig, edit);
+    const file = document.createElement('div');
+    file.className = 'diff-file';
+    file.innerHTML = `
+      <div class="diff-file-head">
+        ⚙ <span style="font-size:12px">${esc(field)}</span>
+        <span class="badge badge-chg">modificado</span>
+      </div>
+      <div class="diff-lines">${buildDiffLines(ops)}</div>
+    `;
+    body.appendChild(file);
+  }
+
+  if (!anyChange) {
+    body.innerHTML = `<div class="diff-empty"><div class="di-icon">✅</div><div>Nenhuma modificação detectada</div></div>`;
+  }
+}
+
+function buildDiffLines(ops) {
+  // Group contiguous del+ins pairs for word-diff
+  const grouped = groupOps(ops);
+  let html = '';
+  let oi = 0, ni = 0;
+
+  // Context collapse: show ±3 lines around changes
+  // For simplicity: show all lines (no collapse for now)
+  for (const g of grouped) {
+    if (g.t === '=') {
+      oi++; ni++;
+      html += dlHtml('', oi, ni, ' ', esc(g.v));
+    } else if (g.t === 'rep') {
+      oi++; ni++;
+      const {dh, ih} = wordDiff(g.d, g.i);
+      html += dlHtml('d-del', oi, '', '−', dh);
+      html += dlHtml('d-ins', '', ni, '+', ih);
+    } else if (g.t === '-') {
+      oi++;
+      html += dlHtml('d-del', oi, '', '−', esc(g.v));
+    } else {
+      ni++;
+      html += dlHtml('d-ins', '', ni, '+', esc(g.v));
+    }
+  }
+  return html;
+}
+
+function dlHtml(cls, on, nn, sign, txt) {
+  return `<div class="dl ${cls}">
+    <div class="dl-nums">
+      <div class="dl-num">${on}</div>
+      <div class="dl-num">${nn}</div>
+    </div>
+    <div class="dl-sign">${sign}</div>
+    <div class="dl-txt">${txt}</div>
+  </div>`;
+}
+
+function groupOps(ops) {
+  const out = [];
+  let i = 0;
+  while (i < ops.length) {
+    if (ops[i].t === '-' && i+1 < ops.length && ops[i+1].t === '+') {
+      out.push({t:'rep', d: ops[i].v, i: ops[i+1].v});
+      i += 2;
+    } else {
+      out.push(ops[i]);
+      i++;
+    }
+  }
+  return out;
+}
+
+// Word-level diff for replaced lines
+function wordDiff(a, b) {
+  const aw = tokenize(a), bw = tokenize(b);
+  const ops = lcs(aw, bw);
+  let dh = '', ih = '';
+  for (const o of ops) {
+    if (o.t === '=')  { dh += esc(o.v); ih += esc(o.v); }
+    else if (o.t==='-') dh += `<span class="w-del">${esc(o.v)}</span>`;
+    else                ih += `<span class="w-ins">${esc(o.v)}</span>`;
+  }
+  return {dh, ih};
+}
+
+function tokenize(s) { return s.match(/\S+|\s+/g) || []; }
+
+// ═══════════════════════════════════════════════════════
+// OUTPUT
+// ═══════════════════════════════════════════════════════
+function buildOutput() {
+  const obj = JSON.parse(JSON.stringify(rawJSON));
+  function set(o, path, val) {
+    const keys = path.split('.');
+    let c = o;
+    for (let i = 0; i < keys.length - 1; i++) c = c[keys[i]];
+    c[keys[keys.length - 1]] = val;
+  }
+  for (const [p, v] of Object.entries(editedData)) set(obj, p, v);
+  return JSON.stringify(obj, null, 2);
+}
+
+function downloadJSON() {
+  const blob = new Blob([buildOutput()], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function copyJSON() {
+  navigator.clipboard.writeText(buildOutput()).then(() => {
+    const btn = document.querySelector('.btn-ghost');
+    const orig = btn.textContent;
+    btn.textContent = '✅ Copiado!';
+    setTimeout(() => btn.textContent = orig, 1800);
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// SEARCH
+// ═══════════════════════════════════════════════════════
+let searchQuery         = '';
+let searchCurrent       = -1;
+let searchRightMarks    = [];   // <mark.srch-r> DOM elements (right backdrop)
+let searchLeftMarks     = [];   // <mark.srch-l> DOM elements (left panel)
+let searchDebounce      = null;
+
+function openSearch() {
+  const bar = document.getElementById('searchBar');
+  bar.hidden = false;
+  const inp = document.getElementById('searchInput');
+  inp.focus();
+  inp.select();
+}
+
+function closeSearch() {
+  document.getElementById('searchBar').hidden = true;
+  searchQuery = '';
+  document.getElementById('searchInput').value = '';
+  document.getElementById('searchCount').textContent = '—';
+  reRenderAllFields();   // remove highlights
+  searchRightMarks = [];
+  searchLeftMarks  = [];
+  searchCurrent    = -1;
+}
+
+// Called on every keystroke in the search input
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('searchInput').addEventListener('input', e => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => {
+      searchQuery   = e.target.value.trim();
+      searchCurrent = 0;
+      runSearch();
+    }, 120);
+  });
+
+  document.getElementById('searchInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.shiftKey ? prevMatch() : nextMatch();
+    }
+    if (e.key === 'Escape') closeSearch();
+  });
+
+  // Global Ctrl+F / Cmd+F
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+      e.preventDefault();
+      openSearch();
+    }
+    if (e.key === 'Escape' && !document.getElementById('searchBar').hidden) {
+      closeSearch();
+    }
+  });
+
+  setupScrollSync();
+});
+
+function runSearch() {
+  reRenderAllFields();
+
+  if (!searchQuery) {
+    document.getElementById('searchCount').textContent = '—';
+    document.getElementById('searchInput').classList.remove('no-match');
+    return;
+  }
+
+  searchRightMarks = Array.from(document.querySelectorAll('.srch-r'));
+  searchLeftMarks  = Array.from(document.querySelectorAll('.srch-l'));
+
+  const total = searchRightMarks.length;
+  document.getElementById('searchInput').classList.toggle('no-match', total === 0);
+
+  if (total === 0) {
+    searchCurrent = -1;
+    document.getElementById('searchCount').textContent = 'Sem resultados';
+    return;
+  }
+
+  if (searchCurrent < 0) searchCurrent = 0;
+  if (searchCurrent >= total) searchCurrent = total - 1;
+
+  activateCurrentMatch();
+  updateSearchCount();
+}
+
+function nextMatch() {
+  if (searchRightMarks.length === 0) return;
+  searchCurrent = (searchCurrent + 1) % searchRightMarks.length;
+  activateCurrentMatch();
+  updateSearchCount();
+}
+
+function prevMatch() {
+  if (searchRightMarks.length === 0) return;
+  searchCurrent = (searchCurrent - 1 + searchRightMarks.length) % searchRightMarks.length;
+  activateCurrentMatch();
+  updateSearchCount();
+}
+
+function activateCurrentMatch() {
+  // Remove .cur from all marks
+  document.querySelectorAll('mark.srch-l.cur, mark.srch-r.cur').forEach(m => m.classList.remove('cur'));
+
+  const rMark = searchRightMarks[searchCurrent];
+  const lMark = searchLeftMarks[searchCurrent];  // may not exist if counts differ
+
+  if (rMark) {
+    rMark.classList.add('cur');
+    scrollMarkIntoView(rMark, document.getElementById('colRight'));
+  }
+  if (lMark) {
+    lMark.classList.add('cur');
+    scrollMarkIntoView(lMark, document.getElementById('colLeft'));
+  }
+}
+
+function scrollMarkIntoView(mark, col) {
+  const markRect = mark.getBoundingClientRect();
+  const colRect  = col.getBoundingClientRect();
+  const relTop   = markRect.top - colRect.top;
+  const target   = col.scrollTop + relTop - col.clientHeight / 2;
+  col.scrollTo({top: target, behavior: 'smooth'});
+}
+
+function updateSearchCount() {
+  const total = searchRightMarks.length;
+  const cur   = total > 0 ? searchCurrent + 1 : 0;
+  document.getElementById('searchCount').textContent =
+    total > 0 ? `${cur} de ${total}` : 'Sem resultados';
+}
+
+// Re-render all field sections (called when search query changes or is cleared)
+function reRenderAllFields() {
+  for (const field of fieldOrder) {
+    const lcEl   = document.getElementById(`lc-${safeid(field)}`);
+    const back   = document.querySelector(`#rw-${safeid(field)} .te-back`);
+    const gutter = document.getElementById(`tg-${safeid(field)}`);
+    if (lcEl)  renderLeftLines(lcEl, field);
+    if (back)  renderBackdrop(back, field);
+    if (gutter && back) requestAnimationFrame(() => syncGutterHeights(gutter, back));
+  }
+}
+
+// Build line HTML with search highlights
+function hlLine(text, markClass) {
+  if (!text) return '\u00a0';
+  const caseSensitive = document.getElementById('searchCase')?.checked ?? false;
+  const src = caseSensitive ? text  : text.toLowerCase();
+  const qry = caseSensitive ? searchQuery : searchQuery.toLowerCase();
+  if (!qry) return esc(text);
+
+  let result = '', pos = 0, idx;
+  while ((idx = src.indexOf(qry, pos)) !== -1) {
+    result += esc(text.slice(pos, idx));
+    result += `<mark class="${markClass}">${esc(text.slice(idx, idx + qry.length))}</mark>`;
+    pos = idx + qry.length;
+  }
+  return (result + esc(text.slice(pos))) || '\u00a0';
+}
+
+// ═══════════════════════════════════════════════════════
+// SCROLL LOCK
+// ═══════════════════════════════════════════════════════
+let scrollLocked = false;
+let isSyncing    = false;
+
+function scrollRatio(el) {
+  const max = el.scrollHeight - el.clientHeight;
+  return max > 0 ? el.scrollTop / max : 0;
+}
+
+function applyRatio(el, ratio) {
+  el.scrollTop = ratio * (el.scrollHeight - el.clientHeight);
+}
+
+function setupScrollSync() {
+  const colL = document.getElementById('colLeft');
+  const colR = document.getElementById('colRight');
+
+  colL.addEventListener('scroll', () => {
+    if (!scrollLocked || isSyncing) return;
+    isSyncing = true;
+    applyRatio(colR, scrollRatio(colL));
+    isSyncing = false;
+  });
+
+  colR.addEventListener('scroll', () => {
+    if (!scrollLocked || isSyncing) return;
+    isSyncing = true;
+    applyRatio(colL, scrollRatio(colR));
+    isSyncing = false;
+  });
+}
+
+function toggleScrollLock() {
+  scrollLocked = !scrollLocked;
+  const btn = document.getElementById('lockBtn');
+  btn.textContent = scrollLocked ? '🔒 Scroll travado' : '🔓 Travar scroll';
+  btn.classList.toggle('on', scrollLocked);
+
+  // Snap left to match right's current ratio
+  if (scrollLocked) {
+    const colR = document.getElementById('colRight');
+    const colL = document.getElementById('colLeft');
+    applyRatio(colL, scrollRatio(colR));
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// GUTTER HELPERS
+// ═══════════════════════════════════════════════════════
+function renderGutter(gutterEl, lineCount) {
+  if (!gutterEl) return;
+  gutterEl.innerHTML = Array.from({length: lineCount}, (_, i) =>
+    `<div class="ln-num">${i + 1}</div>`
+  ).join('');
+}
+
+// Match each gutter .ln-num height to the corresponding .bl div in the backdrop
+// so line numbers stay aligned even when lines word-wrap
+function syncGutterHeights(gutterEl, backEl) {
+  if (!gutterEl || !backEl) return;
+  const bls = backEl.querySelectorAll('.bl');
+  const lns = gutterEl.querySelectorAll('.ln-num');
+  for (let i = 0; i < bls.length && i < lns.length; i++) {
+    const h = bls[i].offsetHeight;
+    lns[i].style.height = h + 'px';
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════════════════════
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+function safeid(s) { return s.replace(/[^a-zA-Z0-9]/g, '_'); }
+
+// ─── Auto-load prompt.json if served from local server ───
+// Try to load the default file (works when served via http)
+(async () => {
+  try {
+    const r = await fetch('./prompt.json');
+    if (r.ok) {
+      const obj = await r.json();
+      loadJSON(obj);
+    }
+  } catch {}
+})();
+</script>
+</body>
+</html>
