@@ -328,6 +328,7 @@
       width: 100%; padding: 6px 10px; font-family: var(--mono); font-size: 12.5px;
       border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
       color: var(--text); outline: none; transition: border .15s;
+      resize: vertical; min-height: 36px; line-height: var(--line-h);
     }
     .var-input:focus { border-color: #1f6feb; box-shadow: 0 0 0 3px rgba(31,111,235,.12); }
     .var-input.filled { border-color: #2ea043; background: rgba(46,160,67,.05); }
@@ -1117,16 +1118,19 @@ function openVars() {
       return `
         <div class="var-item">
           <label>{{${esc(ph)}}}</label>
-          <input class="var-input${val ? ' filled' : ''}" type="text"
+          <textarea class="var-input${val ? ' filled' : ''}"
             placeholder="valor para {{${esc(ph)}}}"
-            value="${esc(val)}"
-            oninput="setVar('${ph.replace(/'/g,"\\'")}', this.value)"
-          >
+            oninput="setVar('${ph.replace(/'/g,"\\'")}', this.value);autosizeVarInput(this)"
+          >${esc(val)}</textarea>
         </div>`;
     }).join('');
   }
 
   document.getElementById('varOverlay').classList.add('open');
+  // auto-size textareas that already have content
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.var-input').forEach(ta => autosizeVarInput(ta));
+  });
 }
 
 function closeVars() {
@@ -1137,10 +1141,14 @@ function closeVars() {
 
 function setVar(key, value) {
   varValues[key] = value;
-  const inputs = document.querySelectorAll('.var-input');
-  inputs.forEach(inp => {
+  document.querySelectorAll('.var-input').forEach(inp => {
     inp.classList.toggle('filled', !!inp.value.trim());
   });
+}
+
+function autosizeVarInput(ta) {
+  ta.style.height = 'auto';
+  ta.style.height = ta.scrollHeight + 'px';
 }
 
 function clearVars() {
