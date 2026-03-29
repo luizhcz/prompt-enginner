@@ -283,6 +283,69 @@
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── VARIABLES DRAWER ────────────────── */
+    .var-overlay {
+      display: none; position: fixed; inset: 0; z-index: 200;
+    }
+    .var-overlay.open { display: block; }
+    .var-backdrop {
+      position: absolute; inset: 0; background: rgba(0,0,0,.35);
+    }
+    .var-drawer {
+      position: absolute; top: 0; right: 0; bottom: 0; width: 340px;
+      background: var(--surface); border-left: 1px solid var(--border);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .var-head {
+      padding: 14px 16px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+    }
+    .var-head h3 { font-size: 13.5px; font-weight: 700; flex: 1; }
+    .var-head .var-count {
+      font-size: 11px; color: var(--muted); background: var(--bg);
+      border: 1px solid var(--border); border-radius: 10px;
+      padding: 1px 8px; font-weight: 600;
+    }
+    .var-close {
+      padding: 3px 8px; border-radius: 5px; border: 1px solid var(--border);
+      background: transparent; cursor: pointer; font-size: 14px; color: var(--muted);
+      line-height: 1; transition: background .12s;
+    }
+    .var-close:hover { background: var(--bg); color: var(--text); }
+    .var-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+    .var-empty {
+      text-align: center; color: var(--muted); font-size: 13px; padding: 40px 0;
+    }
+    .var-item label {
+      display: block; font-size: 11px; font-weight: 700; color: var(--muted);
+      font-family: var(--mono); letter-spacing: .3px; margin-bottom: 5px;
+    }
+    .var-item label span {
+      font-size: 10px; color: #888; font-weight: 400; margin-left: 6px;
+    }
+    .var-input {
+      width: 100%; padding: 6px 10px; font-family: var(--mono); font-size: 12.5px;
+      border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
+      color: var(--text); outline: none; transition: border .15s;
+    }
+    .var-input:focus { border-color: #1f6feb; box-shadow: 0 0 0 3px rgba(31,111,235,.12); }
+    .var-input.filled { border-color: #2ea043; background: rgba(46,160,67,.05); }
+    .var-foot {
+      padding: 12px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px;
+      flex-shrink: 0;
+    }
+
+    /* placeholder highlight in editor panels */
+    .var-ph {
+      background: rgba(255, 200, 0, 0.22); border-radius: 3px;
+      outline: 1px solid rgba(200,160,0,.4); color: inherit;
+      font-style: italic;
+    }
+    .var-ph.resolved {
+      background: rgba(46, 160, 67, 0.18); outline-color: rgba(26,150,60,.4);
+      font-style: normal;
+    }
   </style>
 </head>
 <body>
@@ -298,9 +361,27 @@
     <span class="pill pill-del" id="statDel">-0</span>
     <span class="pill pill-neu" id="statFlds">0 campos</span>
     <div class="nav-sep"></div>
+    <button class="btn btn-ghost" id="btnVars" onclick="openVars()" title="Preencher variáveis {{}}">⚙ Variáveis <span id="varBadge" style="display:none;background:rgba(255,200,0,.3);color:#997700;border-radius:8px;padding:0 5px;font-size:11px;margin-left:4px"></span></button>
     <button class="btn btn-ghost" onclick="document.getElementById('fileIn').click()">📂 Abrir JSON</button>
   </div>
 </nav>
+
+<!-- ── VARIABLES DRAWER ───────────────────── -->
+<div class="var-overlay" id="varOverlay">
+  <div class="var-backdrop" onclick="closeVars()"></div>
+  <div class="var-drawer">
+    <div class="var-head">
+      <h3>⚙ Variáveis</h3>
+      <span class="var-count" id="varCount">0</span>
+      <button class="var-close" onclick="closeVars()">✕</button>
+    </div>
+    <div class="var-body" id="varBody"></div>
+    <div class="var-foot">
+      <button class="btn btn-ghost" style="flex:1" onclick="clearVars()">Limpar tudo</button>
+      <button class="btn btn-primary" style="flex:1" onclick="closeVars()">Aplicar</button>
+    </div>
+  </div>
+</div>
 
 <!-- ── DROP ZONE ─────────────────────────── -->
 <div class="screen active" id="dropZone">
@@ -377,6 +458,7 @@ let originalData = {};   // fieldPath → string
 let editedData   = {};   // fieldPath → string
 let fieldOrder   = [];
 let fileName     = 'output.json';
+let varValues    = {};   // placeholder → value
 let timers       = {};
 
 // ═══════════════════════════════════════════════════════
@@ -429,8 +511,10 @@ function loadJSON(obj) {
   const inp = document.getElementById('searchInput');
   if (inp) { inp.value = ''; inp.classList.remove('no-match'); }
   document.getElementById('searchBar').hidden = true;
+  varValues = {};
   extractFields(obj, '');
   renderEditor();
+  refreshVarBadge();
   showTab('editor');
   document.getElementById('sbFile').textContent = fileName.replace('_edited','');
   updateStats();
@@ -641,7 +725,9 @@ function renderLeftLines(el, field) {
   const ops  = diffLines(orig, editedData[field]);
   const {orig: changed} = changedSets(ops);
   el.innerHTML = orig.split('\n').map((ln, i) => {
-    const content = searchQuery ? hlLine(ln, 'srch-l') : (esc(ln) || '\u00a0');
+    let content;
+    if (searchQuery) content = hlLine(ln, 'srch-l');
+    else content = hlVars(esc(ln)) || '\u00a0';
     return `<div class="ro-line${changed.has(i) ? ' del' : ''}"><span class="ro-ln">${i + 1}</span><span class="ro-txt">${content}</span></div>`;
   }).join('');
 }
@@ -652,7 +738,9 @@ function renderBackdrop(back, field) {
   const ops  = diffLines(orig, txt);
   const {next: changed} = changedSets(ops);
   back.innerHTML = txt.split('\n').map((ln, i) => {
-    const content = searchQuery ? hlLine(ln, 'srch-r') : (esc(ln) || '\u00a0');
+    let content;
+    if (searchQuery) content = hlLine(ln, 'srch-r');
+    else content = hlVars(esc(ln)) || '\u00a0';
     return `<div class="bl${changed.has(i) ? ' ins' : ''}">${content}</div>`;
   }).join('');
 }
@@ -795,7 +883,7 @@ function tokenize(s) { return s.match(/\S+|\s+/g) || []; }
 // ═══════════════════════════════════════════════════════
 // OUTPUT
 // ═══════════════════════════════════════════════════════
-function buildOutput() {
+function buildOutput(substituteVars = false) {
   const obj = JSON.parse(JSON.stringify(rawJSON));
   function set(o, path, val) {
     const keys = path.split('.');
@@ -803,12 +891,23 @@ function buildOutput() {
     for (let i = 0; i < keys.length - 1; i++) c = c[keys[i]];
     c[keys[keys.length - 1]] = val;
   }
-  for (const [p, v] of Object.entries(editedData)) set(obj, p, v);
+  for (const [p, v] of Object.entries(editedData)) {
+    const val = substituteVars ? v.replace(VAR_RE, (m, k) => varValues[k.trim()] || m) : v;
+    set(obj, p, val);
+  }
   return JSON.stringify(obj, null, 2);
 }
 
+function hasFilledVars() {
+  return Object.values(varValues).some(v => v && v.trim());
+}
+
 function downloadJSON() {
-  const blob = new Blob([buildOutput()], {type:'application/json'});
+  let substitute = false;
+  if (hasFilledVars()) {
+    substitute = confirm('Substituir os {{placeholders}} pelos valores preenchidos no JSON baixado?\n\nOK = substituir   |   Cancelar = manter {{placeholders}}');
+  }
+  const blob = new Blob([buildOutput(substitute)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = fileName;
@@ -987,6 +1086,105 @@ function hlLine(text, markClass) {
     pos = idx + qry.length;
   }
   return (result + esc(text.slice(pos))) || '\u00a0';
+}
+
+// ═══════════════════════════════════════════════════════
+// VARIABLES  {{placeholder}}
+// ═══════════════════════════════════════════════════════
+const VAR_RE = /\{\{([^}]+)\}\}/g;
+
+function extractPlaceholders() {
+  const found = new Set();
+  for (const field of fieldOrder) {
+    const text = editedData[field] || '';
+    for (const m of text.matchAll(VAR_RE)) found.add(m[1].trim());
+  }
+  return [...found].sort();
+}
+
+function openVars() {
+  if (!rawJSON) return;
+  const placeholders = extractPlaceholders();
+  const body = document.getElementById('varBody');
+  const count = document.getElementById('varCount');
+  count.textContent = placeholders.length;
+
+  if (placeholders.length === 0) {
+    body.innerHTML = `<div class="var-empty">Nenhum <code style="font-family:var(--mono);background:var(--bg);padding:1px 5px;border-radius:3px">{{placeholder}}</code> encontrado no prompt.</div>`;
+  } else {
+    body.innerHTML = placeholders.map(ph => {
+      const val = varValues[ph] || '';
+      return `
+        <div class="var-item">
+          <label>{{${esc(ph)}}}</label>
+          <input class="var-input${val ? ' filled' : ''}" type="text"
+            placeholder="valor para {{${esc(ph)}}}"
+            value="${esc(val)}"
+            oninput="setVar('${ph.replace(/'/g,"\\'")}', this.value)"
+          >
+        </div>`;
+    }).join('');
+  }
+
+  document.getElementById('varOverlay').classList.add('open');
+}
+
+function closeVars() {
+  document.getElementById('varOverlay').classList.remove('open');
+  reRenderAllFields();
+  refreshVarBadge();
+}
+
+function setVar(key, value) {
+  varValues[key] = value;
+  const inputs = document.querySelectorAll('.var-input');
+  inputs.forEach(inp => {
+    inp.classList.toggle('filled', !!inp.value.trim());
+  });
+}
+
+function clearVars() {
+  varValues = {};
+  document.querySelectorAll('.var-input').forEach(inp => {
+    inp.value = '';
+    inp.classList.remove('filled');
+  });
+}
+
+function refreshVarBadge() {
+  const phs = extractPlaceholders();
+  const badge = document.getElementById('varBadge');
+  const btn   = document.getElementById('btnVars');
+  if (phs.length === 0) {
+    badge.style.display = 'none';
+    btn.style.opacity = rawJSON ? '1' : '.4';
+    return;
+  }
+  const filled = phs.filter(p => varValues[p] && varValues[p].trim()).length;
+  badge.textContent = `${filled}/${phs.length}`;
+  badge.style.display = '';
+  btn.style.borderColor = filled === phs.length ? '#2ea043' : '';
+}
+
+// Apply varValues substitutions to a text string for display
+function applyVars(text) {
+  if (!Object.keys(varValues).length) return null; // nothing to substitute
+  return text.replace(VAR_RE, (match, key) => {
+    const k = key.trim();
+    return varValues[k] !== undefined && varValues[k] !== '' ? varValues[k] : match;
+  });
+}
+
+// Wrap {{placeholders}} with highlight spans for rendering
+function hlVars(text) {
+  return text.replace(VAR_RE, (match, key) => {
+    const k = key.trim();
+    const resolved = varValues[k] && varValues[k].trim();
+    if (resolved) {
+      return `<span class="var-ph resolved">${esc(resolved)}</span>`;
+    }
+    return `<span class="var-ph">${esc(match)}</span>`;
+  });
 }
 
 // ═══════════════════════════════════════════════════════
