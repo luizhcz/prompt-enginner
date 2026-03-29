@@ -1069,17 +1069,6 @@ function esc(s) {
 }
 function safeid(s) { return s.replace(/[^a-zA-Z0-9]/g, '_'); }
 
-// ─── Auto-load prompt.json if served from local server ───
-// Try to load the default file (works when served via http)
-(async () => {
-  try {
-    const r = await fetch('./prompt.json');
-    if (r.ok) {
-      const obj = await r.json();
-      loadJSON(obj);
-    }
-  } catch {}
-})();
 </script>
 </body>
 </html>
